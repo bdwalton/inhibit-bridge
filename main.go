@@ -21,6 +21,8 @@ const (
 	intro           = "org.freedesktop.DBus.Introspectable"
 	screensaver     = "org.freedesktop.ScreenSaver"
 	screensaverPath = "/org/freedesktop/ScreenSaver"
+	// Firefox looks for this path, not /org/freedesktop/ScreenSaver
+	legacyPath = "/ScreenSaver"
 )
 
 var (
@@ -80,17 +82,13 @@ func NewInhibitBridge(prog string) (*inhibitBridge, error) {
 		locks:     make(map[uint]*lockDetails),
 	}
 
-	if err = ib.dbusConn.Export(ib, screensaverPath, screensaver); err != nil {
-		return nil, fmt.Errorf("couldn't export %q on %q: %v", screensaver, screensaverPath, err)
-	}
-	if err = ib.dbusConn.Export(ib, "/ScreenSaver", screensaver); err != nil {
-		return nil, fmt.Errorf("couldn't export %q on %q: %v", screensaver, "/ScreenSaver", err)
-	}
-	if err = ib.dbusConn.Export(introspect.Introspectable(ssXML), screensaverPath, intro); err != nil {
-		return nil, fmt.Errorf("couldn't export %q on %q: %v", intro, screensaverPath, err)
-	}
-	if err = ib.dbusConn.Export(introspect.Introspectable(ssXML), "/ScreenSaver", intro); err != nil {
-		return nil, fmt.Errorf("couldn't export %q on %q: %v", intro, "/ScreenSaver", err)
+	for _, p := range []dbus.ObjectPath{screensaverPath, legacyPath} {
+		if err = ib.dbusConn.Export(ib, p, screensaver); err != nil {
+			return nil, fmt.Errorf("couldn't export %q on %q: %v", screensaver, p, err)
+		}
+		if err = ib.dbusConn.Export(introspect.Introspectable(ssXML), p, intro); err != nil {
+			return nil, fmt.Errorf("couldn't export %q on %q: %v", intro, p, err)
+		}
 	}
 
 	return ib, nil
