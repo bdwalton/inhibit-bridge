@@ -32,8 +32,16 @@ var (
 	screensaverInterface string
 	ssXML                = "<node>" + screensaverInterface + introspect.IntrospectDataString + "</node>"
 
+	// CLI Flags
 	heartbeatInterval = flag.Duration("heartbeat_interval", time.Duration(10*time.Second), "How long do we wait between active lock peer validations.")
+	verbose           = flag.Bool("verbose", true, "If true, output logging status updates. Be quiet when false.")
 )
+
+func maybeLog(fmt string, args ...interface{}) {
+	if *verbose {
+		log.Printf(fmt, args...)
+	}
+}
 
 // lockDetails represents all of the state for an individual inhibit
 // lock that we've requested from systemd.
@@ -105,12 +113,12 @@ func NewInhibitBridge(prog string) (*inhibitBridge, error) {
 func (i *inhibitBridge) heartbeatCheck() {
 	ticker := time.NewTicker(*heartbeatInterval)
 
-	log.Println("Heartbeat checker started.")
+	maybeLog("Heartbeat checker started.\n")
 
 	for {
 		select {
 		case <-ticker.C:
-			log.Println("Heartbeck checker running.")
+			maybeLog("Heartbeck checker running.\n")
 			// Not every peer implements the
 			// org.freedesktop.DBus.Peer interface, so
 			// we'll simply lookup every active peer on
@@ -119,7 +127,7 @@ func (i *inhibitBridge) heartbeatCheck() {
 			// alive.
 			var activeNames []dbus.Sender
 			if err := i.dbusConn.BusObject().Call(listNames, 0).Store(&activeNames); err != nil {
-				log.Printf("Error calling %q: %v", listNames, err)
+				maybeLog("Error calling %q: %v\n", listNames, err)
 				continue
 			}
 
@@ -130,16 +138,16 @@ func (i *inhibitBridge) heartbeatCheck() {
 
 			i.mtx.Lock()
 			for _, ld := range i.locks {
-				log.Println("Heartbeat checking:", ld)
+				maybeLog("Heartbeat checking: %s\n", ld)
 				if _, ok := nameMap[ld.peer]; !ok {
-					log.Printf("Missing peer %q; Dropping: %s", ld.peer, ld)
+					maybeLog("Missing peer %q; Dropping: %s\n", ld.peer, ld)
 					ld.fd.Close()
 					delete(i.locks, ld.cookie)
 				}
 			}
 			i.mtx.Unlock()
 		case <-i.doneCh:
-			log.Println("Heartbeat checker stopping.")
+			maybeLog("Heartbeat checker stopping.\n")
 			close(i.doneCh)
 			return
 		}
@@ -172,7 +180,7 @@ func (i *inhibitBridge) Inhibit(from dbus.Sender, who, why string) (uint, *dbus.
 	defer i.mtx.Unlock()
 	i.locks[ld.cookie] = ld
 
-	log.Printf("Inhibit: %s\n", ld)
+	maybeLog("Inhibit: %s\n", ld)
 	return ld.cookie, nil
 }
 
@@ -190,7 +198,7 @@ func (i *inhibitBridge) UnInhibit(from dbus.Sender, cookie uint32) *dbus.Error {
 		return dbus.MakeFailedError(fmt.Errorf("failed to close clock for cookie %d -> %s", cookie, ld.fd.Name()))
 	}
 
-	log.Printf("UnInhibit: %s\n", ld)
+	maybeLog("UnInhibit: %s\n", ld)
 	return nil
 }
 
@@ -199,21 +207,21 @@ func main() {
 
 	prog, err := os.Executable()
 	if err != nil {
-		log.Fatalf("Error determining program executable: %v\n", err)
+		maybeLog("Error determining program executable: %v\n", err)
 		os.Exit(1)
 	}
 	base := filepath.Base(prog)
 	ib, err := NewInhibitBridge(base)
 	if err != nil {
-		log.Fatalf("Setup failure: %v\n", err)
+		maybeLog("Setup failure: %v\n", err)
 		os.Exit(1)
 	}
-	log.Printf("%s running.\n", base)
+	maybeLog("%s running.\n", base)
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 
-	log.Printf("%s: Received signal %q. Shutting down...\n", base, <-sig)
+	maybeLog("%s: Received signal %q. Shutting down...\n", base, <-sig)
 	ib.Shutdown()
-	log.Println("Goodbye.")
+	maybeLog("Goodbye.\n")
 }
