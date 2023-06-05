@@ -13,22 +13,21 @@ import (
 	"time"
 
 	"github.com/coreos/go-systemd/login1"
-	"github.com/godbus/dbus/introspect"
 	"github.com/godbus/dbus/v5"
+	"github.com/godbus/dbus/v5/introspect"
 )
 
 const (
-	screensaver = "org.freedesktop.ScreenSaver"
-	dtd         = `<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
-"http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">`
+	intro           = "org.freedesktop.DBus.Introspectable"
+	screensaver     = "org.freedesktop.ScreenSaver"
+	screensaverPath = "/org/freedesktop/ScreenSaver"
 )
 
 //go:embed org.freedesktop.ScreenSaver.xml
 var screensaverInterface string
 
 var (
-	ssXML    = dtd + "<node>" + screensaverInterface + introspect.IntrospectDataString + "</node>"
-	introXML = dtd + "<node>" + introspect.IntrospectDataString + "</node>"
+	ssXML = "<node>" + screensaverInterface + introspect.IntrospectDataString + "</node>"
 )
 
 // lockDetails represents all of the state for an individual inhibit
@@ -82,9 +81,12 @@ func NewInhibitBridge(prog string) (*inhibitBridge, error) {
 		locks:     make(map[uint]*lockDetails),
 	}
 
-	conn.Export(ib, "/org/freedesktop/ScreenSaver", "org.freedesktop.ScreenSaver")
-	conn.Export(introspect.Introspectable(introXML), "/com/github/guelfey/Demo",
-		"org.freedesktop.DBus.Introspectable")
+	if err = ib.dbusConn.Export(ib, screensaverPath, screensaver); err != nil {
+		return nil, fmt.Errorf("couldn't export %q on %q: %v", screensaver, screensaverPath, err)
+	}
+	if err = ib.dbusConn.Export(introspect.Introspectable(ssXML), screensaverPath, intro); err != nil {
+		return nil, fmt.Errorf("couldn't export %q on %q: %v", intro, screensaverPath, err)
+	}
 
 	return ib, nil
 }
