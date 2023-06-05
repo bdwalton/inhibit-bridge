@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"sync"
 	"syscall"
-	"time"
 
 	"github.com/coreos/go-systemd/login1"
 	"github.com/godbus/dbus/v5"
@@ -36,7 +35,6 @@ var (
 type lockDetails struct {
 	cookie   uint
 	peer     dbus.Sender
-	ts       time.Time
 	who, why string
 	fd       *os.File
 }
@@ -109,7 +107,6 @@ func (i *inhibitBridge) Inhibit(from dbus.Sender, who, why string) (uint, *dbus.
 	ld := &lockDetails{
 		cookie: uint(rand.Uint32()),
 		peer:   from,
-		ts:     time.Now(),
 		who:    who,
 		why:    why,
 		fd:     fd,
