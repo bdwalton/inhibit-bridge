@@ -10,8 +10,8 @@ Right now, it is entirely bare bones. It has no notion of heart beat on the
 inhbits and relies on the upstream requestor not crashing before UnInhibit is
 called. We may add these features later, but for now they're low priority.
 
-I've only tested this with Chrome as it's the only browser I use. If it doesn't
-work with others, I'll fix that or accept patches.
+It works with recent versions of both Chrome and Firefox. (In firefox, I had to
+enable dom.wakelock.enabled in about:config. You may too.)
 
 ## License
 
