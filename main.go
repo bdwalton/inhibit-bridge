@@ -2,6 +2,7 @@ package main
 
 import (
 	_ "embed"
+	"flag"
 	"fmt"
 	"log"
 	"math/rand"
@@ -30,6 +31,8 @@ var (
 	//go:embed org.freedesktop.ScreenSaver.xml
 	screensaverInterface string
 	ssXML                = "<node>" + screensaverInterface + introspect.IntrospectDataString + "</node>"
+
+	heartbeatInterval = flag.Duration("heartbeat_interval", time.Duration(10*time.Second), "How long do we wait between active lock peer validations.")
 )
 
 // lockDetails represents all of the state for an individual inhibit
@@ -100,7 +103,7 @@ func NewInhibitBridge(prog string) (*inhibitBridge, error) {
 }
 
 func (i *inhibitBridge) heartbeatCheck() {
-	ticker := time.NewTicker(10 * time.Second)
+	ticker := time.NewTicker(*heartbeatInterval)
 
 	log.Println("Heartbeat checker started.")
 
@@ -192,6 +195,8 @@ func (i *inhibitBridge) UnInhibit(from dbus.Sender, cookie uint32) *dbus.Error {
 }
 
 func main() {
+	flag.Parse()
+
 	prog, err := os.Executable()
 	if err != nil {
 		log.Fatalf("Error determining program executable: %v\n", err)
