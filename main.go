@@ -18,17 +18,20 @@ import (
 
 const (
 	screensaver = "org.freedesktop.ScreenSaver"
-)
-
-const dtd = `<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+	dtd         = `<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
 "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">`
+)
 
 //go:embed org.freedesktop.ScreenSaver.xml
 var screensaverInterface string
 
-var ssXML = dtd + "<node>" + screensaverInterface + introspect.IntrospectDataString + "</node>"
-var introXML = dtd + "<node>" + introspect.IntrospectDataString + "</node>"
+var (
+	ssXML    = dtd + "<node>" + screensaverInterface + introspect.IntrospectDataString + "</node>"
+	introXML = dtd + "<node>" + introspect.IntrospectDataString + "</node>"
+)
 
+// lockDetails represents all of the state for an individual inhibit
+// lock that we've requested from systemd.
 type lockDetails struct {
 	cookie   uint
 	ts       time.Time
@@ -36,10 +39,13 @@ type lockDetails struct {
 	fd       *os.File
 }
 
+// String returns a useful textual representation of a lock.
 func (ld *lockDetails) String() string {
-	return fmt.Sprintf("%s: %q / %q (%d)", ld.ts.Format(time.RFC3339), ld.who, ld.why, ld.cookie)
+	return fmt.Sprintf("%s: %q / %q (%d)", ld.who, ld.why, ld.cookie)
 }
 
+// inhibitBridge represents the state required to bridge dbus inhibit
+// requests to systemd logind idle inhibits.
 type inhibitBridge struct {
 	dbusConn  *dbus.Conn
 	loginConn *login1.Conn
@@ -103,7 +109,7 @@ func (i *inhibitBridge) Inhibit(who, why string) (uint, *dbus.Error) {
 	defer i.mtx.Unlock()
 	i.locks[ld.cookie] = ld
 
-	fmt.Printf("Inhibit: %s\n", ld)
+	fmt.Printf("%s: Inhibit: %s\n", time.Now().Format(time.RFC3339), ld)
 	return ld.cookie, nil
 }
 
@@ -121,7 +127,7 @@ func (i *inhibitBridge) UnInhibit(cookie uint32) *dbus.Error {
 		return dbus.MakeFailedError(fmt.Errorf("failed to close clock for cookie %d -> %s", cookie, ld.fd.Name()))
 	}
 
-	fmt.Printf("UnInhibit: %s\n", ld)
+	fmt.Printf("%s: UnInhibit: %s\n", time.Now().Format(time.RFC3339), ld)
 	return nil
 }
 
