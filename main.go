@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/coreos/go-systemd/login1"
 	"github.com/godbus/dbus/v5"
@@ -52,6 +53,7 @@ type inhibitBridge struct {
 	loginConn *login1.Conn
 	locks     map[uint]*lockDetails
 	mtx       sync.Mutex
+	doneCh    chan struct{}
 }
 
 func NewInhibitBridge(prog string) (*inhibitBridge, error) {
@@ -79,6 +81,7 @@ func NewInhibitBridge(prog string) (*inhibitBridge, error) {
 		dbusConn:  conn,
 		loginConn: login,
 		locks:     make(map[uint]*lockDetails),
+		doneCh:    make(chan struct{}),
 	}
 
 	for _, p := range []dbus.ObjectPath{screensaverPath, legacyPath} {
@@ -90,10 +93,38 @@ func NewInhibitBridge(prog string) (*inhibitBridge, error) {
 		}
 	}
 
+	go ib.heartbeatCheck()
+
 	return ib, nil
 }
 
+func (i *inhibitBridge) heartbeatCheck() {
+	ticker := time.NewTicker(10 * time.Second)
+
+	log.Println("Heartbeat checker started.")
+
+	for {
+		select {
+		case <-ticker.C:
+			log.Println("Heartbeck checker running.")
+			i.mtx.Lock()
+
+			for _, ld := range i.locks {
+				log.Println("Heartbeat checking:", ld)
+			}
+			i.mtx.Unlock()
+		case <-i.doneCh:
+			log.Println("Heartbeat checker stopping.")
+			close(i.doneCh)
+			return
+		}
+	}
+}
+
 func (i *inhibitBridge) Shutdown() {
+	i.doneCh <- struct{}{}
+	<-i.doneCh
+
 	i.dbusConn.Close()
 	i.loginConn.Close()
 }
