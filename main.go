@@ -119,7 +119,7 @@ func (i *inhibitBridge) Inhibit(from dbus.Sender, who, why string) (uint, *dbus.
 	defer i.mtx.Unlock()
 	i.locks[ld.cookie] = ld
 
-	fmt.Printf("%s: Inhibit: %s\n", time.Now().Format(time.RFC3339), ld)
+	log.Printf("Inhibit: %s\n", ld)
 	return ld.cookie, nil
 }
 
@@ -137,7 +137,7 @@ func (i *inhibitBridge) UnInhibit(from dbus.Sender, cookie uint32) *dbus.Error {
 		return dbus.MakeFailedError(fmt.Errorf("failed to close clock for cookie %d -> %s", cookie, ld.fd.Name()))
 	}
 
-	fmt.Printf("%s: UnInhibit: %s\n", time.Now().Format(time.RFC3339), ld)
+	log.Printf("UnInhibit: %s\n", ld)
 	return nil
 }
 
