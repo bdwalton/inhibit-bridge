@@ -84,8 +84,14 @@ func NewInhibitBridge(prog string) (*inhibitBridge, error) {
 	if err = ib.dbusConn.Export(ib, screensaverPath, screensaver); err != nil {
 		return nil, fmt.Errorf("couldn't export %q on %q: %v", screensaver, screensaverPath, err)
 	}
+	if err = ib.dbusConn.Export(ib, "/ScreenSaver", screensaver); err != nil {
+		return nil, fmt.Errorf("couldn't export %q on %q: %v", screensaver, "/ScreenSaver", err)
+	}
 	if err = ib.dbusConn.Export(introspect.Introspectable(ssXML), screensaverPath, intro); err != nil {
 		return nil, fmt.Errorf("couldn't export %q on %q: %v", intro, screensaverPath, err)
+	}
+	if err = ib.dbusConn.Export(introspect.Introspectable(ssXML), "/ScreenSaver", intro); err != nil {
+		return nil, fmt.Errorf("couldn't export %q on %q: %v", intro, "/ScreenSaver", err)
 	}
 
 	return ib, nil
