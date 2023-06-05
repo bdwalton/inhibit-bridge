@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -47,13 +48,14 @@ func (ld *lockDetails) String() string {
 // inhibitBridge represents the state required to bridge dbus inhibit
 // requests to systemd logind idle inhibits.
 type inhibitBridge struct {
+	prog      string
 	dbusConn  *dbus.Conn
 	loginConn *login1.Conn
 	locks     map[uint]*lockDetails
 	mtx       sync.Mutex
 }
 
-func NewInhibitBridge() (*inhibitBridge, error) {
+func NewInhibitBridge(prog string) (*inhibitBridge, error) {
 	conn, err := dbus.ConnectSessionBus()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Failed to connect to session bus:", err)
@@ -74,6 +76,7 @@ func NewInhibitBridge() (*inhibitBridge, error) {
 	}
 
 	ib := &inhibitBridge{
+		prog:      prog,
 		dbusConn:  conn,
 		loginConn: login,
 		locks:     make(map[uint]*lockDetails),
@@ -92,7 +95,7 @@ func (i *inhibitBridge) Shutdown() {
 }
 
 func (i *inhibitBridge) Inhibit(who, why string) (uint, *dbus.Error) {
-	fd, err := i.loginConn.Inhibit("idle", "idle-bridge", who+" "+why, "block")
+	fd, err := i.loginConn.Inhibit("idle", i.prog, who+" "+why, "block")
 	if err != nil {
 		return 0, dbus.MakeFailedError(err)
 	}
@@ -132,15 +135,20 @@ func (i *inhibitBridge) UnInhibit(cookie uint32) *dbus.Error {
 }
 
 func main() {
-	ib, err := NewInhibitBridge()
+	prog, err := os.Executable()
 	if err != nil {
-		log.Fatalf("Setup failure: %v", err)
+		log.Fatalf("Error determining program executable: %v\n", err)
+		os.Exit(1)
+	}
+	ib, err := NewInhibitBridge(filepath.Base(prog))
+	if err != nil {
+		log.Fatalf("Setup failure: %v\n", err)
 		os.Exit(1)
 	}
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 
-	log.Printf("idle-bridge: Received signal %q. Shutting down...", <-sig)
+	log.Printf("idle-bridge: Received signal %q. Shutting down...\n", <-sig)
 	ib.Shutdown()
 }
