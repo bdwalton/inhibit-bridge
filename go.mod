@@ -1,4 +1,4 @@
-module github.com/bdwalton/idle-inhibit
+module github.com/bdwalton/inhibit-bridge
 
 go 1.19
 
