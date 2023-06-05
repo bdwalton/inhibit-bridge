@@ -41,7 +41,7 @@ type lockDetails struct {
 
 // String returns a useful textual representation of a lock.
 func (ld *lockDetails) String() string {
-	return fmt.Sprintf("%q / %q (%d)", ld.who, ld.why, ld.cookie)
+	return fmt.Sprintf("%q / %q (%q, %d)", ld.who, ld.why, ld.peer, ld.cookie)
 }
 
 // inhibitBridge represents the state required to bridge dbus inhibit
