@@ -175,15 +175,18 @@ func main() {
 		log.Fatalf("Error determining program executable: %v\n", err)
 		os.Exit(1)
 	}
-	ib, err := NewInhibitBridge(filepath.Base(prog))
+	base := filepath.Base(prog)
+	ib, err := NewInhibitBridge(base)
 	if err != nil {
 		log.Fatalf("Setup failure: %v\n", err)
 		os.Exit(1)
 	}
+	log.Printf("%s running.\n", base)
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 
-	log.Printf("%s: Received signal %q. Shutting down...\n", prog, <-sig)
+	log.Printf("%s: Received signal %q. Shutting down...\n", base, <-sig)
 	ib.Shutdown()
+	log.Println("Goodbye.")
 }
