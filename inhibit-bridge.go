@@ -154,11 +154,21 @@ func (i *inhibitBridge) heartbeatCheck() {
 	}
 }
 
-func (i *inhibitBridge) Shutdown() {
+func (i *inhibitBridge) shutdown() {
+	i.dbusConn.Close()
+
+	// Shutdown the heartbeatCheck and wait for it
 	i.doneCh <- struct{}{}
 	<-i.doneCh
 
-	i.dbusConn.Close()
+	i.mtx.Lock()
+	for _, ld := range i.locks {
+		if err := ld.fd.Close(); err != nil {
+			maybeLog("Error closing lock for %q: %v\n", ld, err)
+		}
+	}
+	i.mtx.Unlock()
+
 	i.loginConn.Close()
 }
 
@@ -222,6 +232,6 @@ func main() {
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 
 	maybeLog("%s: Received signal %q. Shutting down...\n", base, <-sig)
-	ib.Shutdown()
+	ib.shutdown()
 	maybeLog("Goodbye.\n")
 }
