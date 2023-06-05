@@ -202,6 +202,11 @@ func (i *inhibitBridge) UnInhibit(from dbus.Sender, cookie uint32) *dbus.Error {
 	if !ok {
 		return dbus.MakeFailedError(fmt.Errorf("%d is an invalid cookie", cookie))
 	}
+
+	if from != ld.peer {
+		return dbus.MakeFailedError(fmt.Errorf("%q is not the originating peer for cookie %d", from, cookie))
+	}
+
 	delete(i.locks, ld.cookie)
 
 	if err := ld.fd.Close(); err != nil {
