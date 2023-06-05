@@ -23,11 +23,10 @@ const (
 	screensaverPath = "/org/freedesktop/ScreenSaver"
 )
 
-//go:embed org.freedesktop.ScreenSaver.xml
-var screensaverInterface string
-
 var (
-	ssXML = "<node>" + screensaverInterface + introspect.IntrospectDataString + "</node>"
+	//go:embed org.freedesktop.ScreenSaver.xml
+	screensaverInterface string
+	ssXML                = "<node>" + screensaverInterface + introspect.IntrospectDataString + "</node>"
 )
 
 // lockDetails represents all of the state for an individual inhibit
