@@ -154,6 +154,6 @@ func main() {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 
-	log.Printf("idle-bridge: Received signal %q. Shutting down...\n", <-sig)
+	log.Printf("%s: Received signal %q. Shutting down...\n", prog, <-sig)
 	ib.Shutdown()
 }
