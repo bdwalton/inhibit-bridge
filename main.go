@@ -35,6 +35,7 @@ var (
 // lock that we've requested from systemd.
 type lockDetails struct {
 	cookie   uint
+	peer     dbus.Sender
 	ts       time.Time
 	who, why string
 	fd       *os.File
@@ -99,7 +100,7 @@ func (i *inhibitBridge) Shutdown() {
 	i.loginConn.Close()
 }
 
-func (i *inhibitBridge) Inhibit(who, why string) (uint, *dbus.Error) {
+func (i *inhibitBridge) Inhibit(from dbus.Sender, who, why string) (uint, *dbus.Error) {
 	fd, err := i.loginConn.Inhibit("idle", i.prog, who+" "+why, "block")
 	if err != nil {
 		return 0, dbus.MakeFailedError(err)
@@ -107,6 +108,7 @@ func (i *inhibitBridge) Inhibit(who, why string) (uint, *dbus.Error) {
 
 	ld := &lockDetails{
 		cookie: uint(rand.Uint32()),
+		peer:   from,
 		ts:     time.Now(),
 		who:    who,
 		why:    why,
@@ -121,7 +123,7 @@ func (i *inhibitBridge) Inhibit(who, why string) (uint, *dbus.Error) {
 	return ld.cookie, nil
 }
 
-func (i *inhibitBridge) UnInhibit(cookie uint32) *dbus.Error {
+func (i *inhibitBridge) UnInhibit(from dbus.Sender, cookie uint32) *dbus.Error {
 	i.mtx.Lock()
 	defer i.mtx.Unlock()
 
