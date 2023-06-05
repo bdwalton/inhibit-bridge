@@ -18,6 +18,7 @@ import (
 )
 
 const (
+	listNames       = "org.freedesktop.DBus.ListNames"
 	intro           = "org.freedesktop.DBus.Introspectable"
 	screensaver     = "org.freedesktop.ScreenSaver"
 	screensaverPath = "/org/freedesktop/ScreenSaver"
@@ -107,10 +108,31 @@ func (i *inhibitBridge) heartbeatCheck() {
 		select {
 		case <-ticker.C:
 			log.Println("Heartbeck checker running.")
-			i.mtx.Lock()
+			// Not every peer implements the
+			// org.freedesktop.DBus.Peer interface, so
+			// we'll simply lookup every active peer on
+			// the bus. Using that, we can determine if a
+			// peer that requested the inhibit is still
+			// alive.
+			var activeNames []dbus.Sender
+			if err := i.dbusConn.BusObject().Call(listNames, 0).Store(&activeNames); err != nil {
+				log.Printf("Error calling %q: %v", listNames, err)
+				continue
+			}
 
+			nameMap := make(map[dbus.Sender]struct{})
+			for _, n := range activeNames {
+				nameMap[n] = struct{}{}
+			}
+
+			i.mtx.Lock()
 			for _, ld := range i.locks {
 				log.Println("Heartbeat checking:", ld)
+				if _, ok := nameMap[ld.peer]; !ok {
+					log.Printf("Missing peer %q; Dropping: %s", ld.peer, ld)
+					ld.fd.Close()
+					delete(i.locks, ld.cookie)
+				}
 			}
 			i.mtx.Unlock()
 		case <-i.doneCh:
