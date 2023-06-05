@@ -7,9 +7,11 @@ import (
 	"math/rand"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
+	"github.com/coreos/go-systemd/login1"
 	"github.com/godbus/dbus/introspect"
 	"github.com/godbus/dbus/v5"
 )
@@ -27,8 +29,22 @@ var screensaverInterface string
 var ssXML = dtd + "<node>" + screensaverInterface + introspect.IntrospectDataString + "</node>"
 var introXML = dtd + "<node>" + introspect.IntrospectDataString + "</node>"
 
+type lockDetails struct {
+	cookie   uint
+	ts       time.Time
+	who, why string
+	fd       *os.File
+}
+
+func (ld *lockDetails) String() string {
+	return fmt.Sprintf("%s: %q / %q (%d)", ld.ts.Format(time.RFC3339), ld.who, ld.why, ld.cookie)
+}
+
 type inhibitBridge struct {
-	dbusConn *dbus.Conn
+	dbusConn  *dbus.Conn
+	loginConn *login1.Conn
+	locks     map[uint]*lockDetails
+	mtx       sync.Mutex
 }
 
 func NewInhibitBridge() (*inhibitBridge, error) {
@@ -46,7 +62,16 @@ func NewInhibitBridge() (*inhibitBridge, error) {
 		return nil, fmt.Errorf("conn.RequestName(%q, 0): not the primary owner.", screensaver)
 	}
 
-	ib := &inhibitBridge{dbusConn: conn}
+	login, err := login1.New()
+	if err != nil {
+		return nil, fmt.Errorf("login1.New() failed: %v", err)
+	}
+
+	ib := &inhibitBridge{
+		dbusConn:  conn,
+		loginConn: login,
+		locks:     make(map[uint]*lockDetails),
+	}
 
 	conn.Export(ib, "/org/freedesktop/ScreenSaver", "org.freedesktop.ScreenSaver")
 	conn.Export(introspect.Introspectable(introXML), "/com/github/guelfey/Demo",
@@ -57,17 +82,46 @@ func NewInhibitBridge() (*inhibitBridge, error) {
 
 func (i *inhibitBridge) Shutdown() {
 	i.dbusConn.Close()
+	i.loginConn.Close()
 }
 
 func (i *inhibitBridge) Inhibit(who, why string) (uint, *dbus.Error) {
-	cookie := rand.Uint32()
+	fd, err := i.loginConn.Inhibit("idle", "idle-bridge", who+" "+why, "block")
+	if err != nil {
+		return 0, dbus.MakeFailedError(err)
+	}
 
-	fmt.Printf("%s: who: %q; why: %q; cookie: %d\n", time.Now().Format(time.RFC3339), who, why, cookie)
-	return uint(cookie), nil
+	ld := &lockDetails{
+		cookie: uint(rand.Uint32()),
+		ts:     time.Now(),
+		who:    who,
+		why:    why,
+		fd:     fd,
+	}
+
+	i.mtx.Lock()
+	defer i.mtx.Unlock()
+	i.locks[ld.cookie] = ld
+
+	fmt.Printf("Inhibit: %s\n", ld)
+	return ld.cookie, nil
 }
 
 func (i *inhibitBridge) UnInhibit(cookie uint32) *dbus.Error {
-	fmt.Printf("%s: cookie: %d\n", time.Now().Format(time.RFC3339), cookie)
+	i.mtx.Lock()
+	defer i.mtx.Unlock()
+
+	ld, ok := i.locks[uint(cookie)]
+	if !ok {
+		return dbus.MakeFailedError(fmt.Errorf("%d is an invalid cookie", cookie))
+	}
+	delete(i.locks, ld.cookie)
+
+	if err := ld.fd.Close(); err != nil {
+		return dbus.MakeFailedError(fmt.Errorf("failed to close clock for cookie %d -> %s", cookie, ld.fd.Name()))
+	}
+
+	fmt.Printf("UnInhibit: %s\n", ld)
 	return nil
 }
 
