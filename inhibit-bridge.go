@@ -35,6 +35,7 @@ var (
 	// CLI Flags
 	heartbeatInterval = flag.Duration("heartbeat_interval", time.Duration(10*time.Second), "How long do we wait between active lock peer validations.")
 	verbose           = flag.Bool("verbose", true, "If true, output logging status updates. Be quiet when false.")
+	logfile           = flag.String("logfile", "", "If set, log to this path instead of the default (os.Stderr) target")
 )
 
 func maybeLog(fmt string, args ...interface{}) {
@@ -219,6 +220,15 @@ func (i *inhibitBridge) UnInhibit(from dbus.Sender, cookie uint32) *dbus.Error {
 
 func main() {
 	flag.Parse()
+
+	if *logfile != "" {
+		lf, err := os.OpenFile(*logfile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+		if err != nil {
+			log.Fatalf("Couldn't open logfile %q: %v\n", *logfile, err)
+		}
+		log.SetOutput(lf)
+
+	}
 
 	prog, err := os.Executable()
 	if err != nil {
