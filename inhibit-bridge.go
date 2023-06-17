@@ -34,14 +34,18 @@ var (
 
 	// CLI Flags
 	heartbeatInterval = flag.Duration("heartbeat_interval", time.Duration(10*time.Second), "How long do we wait between active lock peer validations.")
-	verbose           = flag.Bool("verbose", true, "If true, output logging status updates. Be quiet when false.")
+	verbose           = flag.Bool("verbose", false, "If true, output logging status updates. Be quiet when false.")
 	logfile           = flag.String("logfile", "", "If set, log to this path instead of the default (os.Stderr) target")
 )
 
 func maybeLog(fmt string, args ...interface{}) {
 	if *verbose {
-		log.Printf(fmt, args...)
+		reallyLog(fmt, args...)
 	}
+}
+
+func reallyLog(fmt string, args ...interface{}) {
+	log.Printf(fmt, args...)
 }
 
 // lockDetails represents all of the state for an individual inhibit
@@ -243,10 +247,22 @@ func main() {
 	}
 	maybeLog("%s running.\n", base)
 
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+	sigQuit := make(chan os.Signal, 1)
+	signal.Notify(sigQuit, syscall.SIGINT, syscall.SIGTERM)
 
-	maybeLog("%s: Received signal %q. Shutting down...\n", base, <-sig)
-	ib.shutdown()
-	maybeLog("Goodbye.\n")
+	sigLog := make(chan os.Signal, 1)
+	signal.Notify(sigLog, syscall.SIGUSR1)
+
+	for {
+		select {
+		case s := <-sigQuit:
+			maybeLog("%s: Received signal %q. Shutting down...\n", base, s)
+			ib.shutdown()
+			maybeLog("Goodbye.\n")
+			os.Exit(0)
+		case <-sigLog:
+			*verbose = !*verbose
+			reallyLog("%s: Toggling log output. Now %t.", base, *verbose)
+		}
+	}
 }
