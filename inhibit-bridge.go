@@ -243,7 +243,8 @@ func main() {
 		maybeLog("Setup failure: %v\n", err)
 		os.Exit(1)
 	}
-	maybeLog("%s running.\n", base)
+	log.SetPrefix(base + ": ")
+	maybeLog("Running.\n")
 
 	sigQuit := make(chan os.Signal, 1)
 	signal.Notify(sigQuit, syscall.SIGINT, syscall.SIGTERM)
@@ -254,13 +255,13 @@ func main() {
 	for {
 		select {
 		case s := <-sigQuit:
-			maybeLog("%s: Received signal %q. Shutting down...\n", base, s)
+			maybeLog("Received signal %q. Shutting down...\n", s)
 			ib.shutdown()
 			maybeLog("Goodbye.\n")
 			os.Exit(0)
 		case <-sigLog:
 			*verbose = !*verbose
-			reallyLog("%s: Toggling log output. Now %t.", base, *verbose)
+			reallyLog("Toggling log output. Now %t.", *verbose)
 		}
 	}
 }
