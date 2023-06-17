@@ -76,7 +76,6 @@ type inhibitBridge struct {
 func NewInhibitBridge(prog string) (*inhibitBridge, error) {
 	conn, err := dbus.ConnectSessionBus()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "Failed to connect to session bus:", err)
 		return nil, fmt.Errorf("session bus connect failed: %v", err)
 	}
 
@@ -231,7 +230,6 @@ func main() {
 			log.Fatalf("Couldn't open logfile %q: %v\n", *logfile, err)
 		}
 		log.SetOutput(lf)
-
 	}
 
 	prog, err := os.Executable()
