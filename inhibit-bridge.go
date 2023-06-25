@@ -120,6 +120,8 @@ func NewInhibitBridge(prog string) (*inhibitBridge, error) {
 	systray.SetTitle(prog)
 	systray.SetTemplateIcon(iconUninhibited, iconUninhibited)
 
+	ib.setStatus()
+
 	// We don't need any cleanup when this gets shut down, so ignore the end func().
 	sysStart, _ := systray.RunWithExternalLoop(ib.systrayStart, func() {})
 
@@ -129,12 +131,14 @@ func NewInhibitBridge(prog string) (*inhibitBridge, error) {
 	return ib, nil
 }
 
-func (i *inhibitBridge) setIcon() {
+func (i *inhibitBridge) setStatus() {
 	if len(i.locks) > 0 {
 		systray.SetIcon(iconInhibited)
 	} else {
 		systray.SetIcon(iconUninhibited)
 	}
+
+	systray.SetTitle(fmt.Sprintf("%s: %d inhibits (manual: %t)", i.prog, len(i.locks), i.localCookie > 0))
 }
 
 func (i *inhibitBridge) dbusName() dbus.Sender {
@@ -158,6 +162,7 @@ func (i *inhibitBridge) systrayStart() {
 
 				}
 
+				i.localCookie = 0
 				mInhibit.Uncheck()
 				mInhibit.SetTitle("Manually inhibit screen lock")
 			} else {
@@ -170,9 +175,11 @@ func (i *inhibitBridge) systrayStart() {
 				i.localCookie = cookie
 				mInhibit.Check()
 				mInhibit.SetTitle("Release manual screen lock inhibit")
-
 			}
 		}
+		i.mtx.Lock()
+		i.setStatus()
+		i.mtx.Unlock()
 	}
 }
 
@@ -263,7 +270,7 @@ func (i *inhibitBridge) Inhibit(from dbus.Sender, who, why string) (uint, *dbus.
 	i.locks[ld.cookie] = ld
 
 	maybeLog("Inhibit: %s\n", ld)
-	i.setIcon()
+	i.setStatus()
 
 	return ld.cookie, nil
 }
@@ -288,7 +295,7 @@ func (i *inhibitBridge) UnInhibit(from dbus.Sender, cookie uint32) *dbus.Error {
 	}
 
 	maybeLog("UnInhibit: %s\n", ld)
-	i.setIcon()
+	i.setStatus()
 
 	return nil
 }
