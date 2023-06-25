@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"fyne.io/systray"
 	"github.com/coreos/go-systemd/login1"
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/introspect"
@@ -28,6 +29,11 @@ const (
 )
 
 var (
+	//go:embed icons/uninhibited.png
+	iconUninhibited []byte
+	//go:embed icons/inhibited.png
+	iconInhibited []byte
+
 	//go:embed org.freedesktop.ScreenSaver.xml
 	screensaverInterface string
 	ssXML                = "<node>" + screensaverInterface + introspect.IntrospectDataString + "</node>"
@@ -65,12 +71,13 @@ func (ld *lockDetails) String() string {
 // inhibitBridge represents the state required to bridge dbus inhibit
 // requests to systemd logind idle inhibits.
 type inhibitBridge struct {
-	prog      string
-	dbusConn  *dbus.Conn
-	loginConn *login1.Conn
-	locks     map[uint]*lockDetails
-	mtx       sync.Mutex
-	doneCh    chan struct{}
+	prog           string
+	dbusConn       *dbus.Conn
+	loginConn      *login1.Conn
+	localCookie    uint
+	locks          map[uint]*lockDetails
+	mtx            sync.Mutex
+	trayCh, doneCh chan struct{}
 }
 
 func NewInhibitBridge(prog string) (*inhibitBridge, error) {
@@ -97,6 +104,7 @@ func NewInhibitBridge(prog string) (*inhibitBridge, error) {
 		dbusConn:  conn,
 		loginConn: login,
 		locks:     make(map[uint]*lockDetails),
+		trayCh:    make(chan struct{}),
 		doneCh:    make(chan struct{}),
 	}
 
@@ -109,9 +117,63 @@ func NewInhibitBridge(prog string) (*inhibitBridge, error) {
 		}
 	}
 
+	systray.SetTitle(prog)
+	systray.SetTemplateIcon(iconUninhibited, iconUninhibited)
+
+	// We don't need any cleanup when this gets shut down, so ignore the end func().
+	sysStart, _ := systray.RunWithExternalLoop(ib.systrayStart, func() {})
+
+	go sysStart()
 	go ib.heartbeatCheck()
 
 	return ib, nil
+}
+
+func (i *inhibitBridge) setIcon() {
+	if len(i.locks) > 0 {
+		systray.SetIcon(iconInhibited)
+	} else {
+		systray.SetIcon(iconUninhibited)
+	}
+}
+
+func (i *inhibitBridge) dbusName() dbus.Sender {
+	return dbus.Sender(i.dbusConn.Names()[0])
+}
+
+func (i *inhibitBridge) systrayStart() {
+	mInhibit := systray.AddMenuItemCheckbox("Manually inhibit screen lock", "", false)
+
+	for {
+		select {
+		case <-i.trayCh:
+			maybeLog("Exiting systray.")
+			close(i.trayCh)
+			return
+		case <-mInhibit.ClickedCh:
+			if mInhibit.Checked() {
+				if err := i.UnInhibit(i.dbusName(), uint32(i.localCookie)); err != nil {
+					maybeLog("Error manually unihibiting: %v", err)
+					continue
+
+				}
+
+				mInhibit.Uncheck()
+				mInhibit.SetTitle("Manually inhibit screen lock")
+			} else {
+				cookie, err := i.Inhibit(i.dbusName(), "systray", "clicked")
+				if err != nil {
+					maybeLog("Error manually inhibiting: %v", err)
+					continue
+				}
+
+				i.localCookie = cookie
+				mInhibit.Check()
+				mInhibit.SetTitle("Release manual screen lock inhibit")
+
+			}
+		}
+	}
 }
 
 func (i *inhibitBridge) heartbeatCheck() {
@@ -159,12 +221,18 @@ func (i *inhibitBridge) heartbeatCheck() {
 }
 
 func (i *inhibitBridge) shutdown() {
+	// Stop programatic inhibits
 	i.dbusConn.Close()
 
-	// Shutdown the heartbeatCheck and wait for it
+	// Stop manual inhibits
+	i.trayCh <- struct{}{}
+	<-i.trayCh
+
+	// With all inhibit sources stopped, we can shut down the heartbeat.
 	i.doneCh <- struct{}{}
 	<-i.doneCh
 
+	// Close any open files to release all inhibits.
 	i.mtx.Lock()
 	for _, ld := range i.locks {
 		if err := ld.fd.Close(); err != nil {
@@ -195,6 +263,8 @@ func (i *inhibitBridge) Inhibit(from dbus.Sender, who, why string) (uint, *dbus.
 	i.locks[ld.cookie] = ld
 
 	maybeLog("Inhibit: %s\n", ld)
+	i.setIcon()
+
 	return ld.cookie, nil
 }
 
@@ -218,6 +288,8 @@ func (i *inhibitBridge) UnInhibit(from dbus.Sender, cookie uint32) *dbus.Error {
 	}
 
 	maybeLog("UnInhibit: %s\n", ld)
+	i.setIcon()
+
 	return nil
 }
 
