@@ -31,8 +31,10 @@ const (
 var (
 	//go:embed icons/uninhibited.png
 	iconUninhibited []byte
-	//go:embed icons/inhibited.png
-	iconInhibited []byte
+	//go:embed icons/auto-inhibited.png
+	iconAutoInhibited []byte
+	//go:embed icons/manually-inhibited.png
+	iconManuallyInhibited []byte
 
 	//go:embed org.freedesktop.ScreenSaver.xml
 	screensaverInterface string
@@ -132,8 +134,10 @@ func NewInhibitBridge(prog string) (*inhibitBridge, error) {
 }
 
 func (i *inhibitBridge) setStatus() {
-	if len(i.locks) > 0 {
-		systray.SetIcon(iconInhibited)
+	if i.localCookie > 0 {
+		systray.SetIcon(iconManuallyInhibited)
+	} else if len(i.locks) > 0 {
+		systray.SetIcon(iconAutoInhibited)
 	} else {
 		systray.SetIcon(iconUninhibited)
 	}
