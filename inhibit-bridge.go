@@ -168,7 +168,6 @@ func (i *inhibitBridge) systrayStart() {
 
 				i.localCookie = 0
 				mInhibit.Uncheck()
-				mInhibit.SetTitle("Manually inhibit screen lock")
 			} else {
 				cookie, err := i.Inhibit(i.dbusName(), "systray", "clicked")
 				if err != nil {
@@ -178,7 +177,6 @@ func (i *inhibitBridge) systrayStart() {
 
 				i.localCookie = cookie
 				mInhibit.Check()
-				mInhibit.SetTitle("Release manual screen lock inhibit")
 			}
 		}
 		i.mtx.Lock()
