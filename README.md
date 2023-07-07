@@ -14,6 +14,10 @@ module. You must have a status tray listener available on dbus prior to startup
 or the status tray will not be displayed. Other functionality should continue to
 work.
 
+inhibit-bridge handles SIGUSR1 by toggling the manual inhibit state. Using this,
+you can wire up hotkeys in sway/i3/whatever to change the inhibit state without
+the mouse.
+
 inhibit-bridle will heartbeat check peers that have requested inhibits so that
 we don't end up in a state where a program crash leads to permanently inhibited
 screensaver/idle behaviour.

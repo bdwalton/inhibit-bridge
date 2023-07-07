@@ -76,6 +76,7 @@ type inhibitBridge struct {
 	prog           string
 	dbusConn       *dbus.Conn
 	loginConn      *login1.Conn
+	manualInhibit  *systray.MenuItem
 	localCookie    uint
 	locks          map[uint]*lockDetails
 	mtx            sync.Mutex
@@ -149,8 +150,16 @@ func (i *inhibitBridge) dbusName() dbus.Sender {
 	return dbus.Sender(i.dbusConn.Names()[0])
 }
 
+func (i *inhibitBridge) manualInhibitToggle() {
+	// Potential race here at startup, but shouldn't be
+	// detrimental.
+	if i.manualInhibit != nil {
+		i.manualInhibit.ClickedCh <- struct{}{}
+	}
+}
+
 func (i *inhibitBridge) systrayStart() {
-	mInhibit := systray.AddMenuItemCheckbox("Manually inhibit screen lock", "", false)
+	i.manualInhibit = systray.AddMenuItemCheckbox("Manually inhibit screen lock", "", false)
 
 	for {
 		select {
@@ -158,8 +167,8 @@ func (i *inhibitBridge) systrayStart() {
 			maybeLog("Exiting systray.")
 			close(i.trayCh)
 			return
-		case <-mInhibit.ClickedCh:
-			if mInhibit.Checked() {
+		case <-i.manualInhibit.ClickedCh:
+			if i.manualInhibit.Checked() {
 				if err := i.UnInhibit(i.dbusName(), uint32(i.localCookie)); err != nil {
 					maybeLog("Error manually unihibiting: %v", err)
 					continue
@@ -167,7 +176,7 @@ func (i *inhibitBridge) systrayStart() {
 				}
 
 				i.localCookie = 0
-				mInhibit.Uncheck()
+				i.manualInhibit.Uncheck()
 			} else {
 				cookie, err := i.Inhibit(i.dbusName(), "systray", "clicked")
 				if err != nil {
@@ -176,7 +185,7 @@ func (i *inhibitBridge) systrayStart() {
 				}
 
 				i.localCookie = cookie
-				mInhibit.Check()
+				i.manualInhibit.Check()
 			}
 		}
 		i.mtx.Lock()
@@ -330,8 +339,8 @@ func main() {
 	sigQuit := make(chan os.Signal, 1)
 	signal.Notify(sigQuit, syscall.SIGINT, syscall.SIGTERM)
 
-	sigLog := make(chan os.Signal, 1)
-	signal.Notify(sigLog, syscall.SIGUSR1)
+	sigToggle := make(chan os.Signal, 1)
+	signal.Notify(sigToggle, syscall.SIGUSR1)
 
 	for {
 		select {
@@ -340,9 +349,9 @@ func main() {
 			ib.shutdown()
 			maybeLog("Goodbye.\n")
 			os.Exit(0)
-		case <-sigLog:
-			*verbose = !*verbose
-			reallyLog("Toggling log output. Now %t.", *verbose)
+		case <-sigToggle:
+			maybeLog("Received SIGUSR1. Toggling inhibit.\n")
+			ib.manualInhibitToggle()
 		}
 	}
 }
