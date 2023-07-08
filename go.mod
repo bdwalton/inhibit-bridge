@@ -13,3 +13,5 @@ require (
 	github.com/tevino/abool v1.2.0 // indirect
 	golang.org/x/sys v0.0.0-20200515095857-1151b9dac4a9 // indirect
 )
+
+replace fyne.io/systray => github.com/bdwalton/systray v1.10.1
