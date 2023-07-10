@@ -1,26 +1,24 @@
 # inhibit-bridge
 
 This is a little utility to bridge between dbus org.freedesktop.ScreenSaver
-Inhibit and UnInhibit messages to systemd's logind idle inhibits. The usecase is
-to provide environments like i3/sway a mechanism to inhibit the screensaver when
-browser and the like are playing video.  This relies on other tools like
-swayidle respecting systemd's logind inhibits.
+Inhibit/UnInhibit messages and systemd's logind idle inhibits. The usecase is to
+provide environments like i3/sway a mechanism to inhibit the screensaver when
+browsers and the like are playing video. It relies on other tools like swayidle
+to respect systemd's logind inhibits.
 
-It provides a visual indicator in the status tray as to whether it is currently
-holding any inhibits. Green for none held, yellow for programmatic inhibits and
-red if there is a manual inhibit. Manual inhibits can be done via the menu on
-the status icon and thus there is no need for (eg) waybar's idle_inhibitor
-module. You must have a status tray listener available on dbus prior to startup
-or the status tray will not be displayed. Other functionality should continue to
-work.
+It provides a visual indicator in the status tray (if present) as to whether it
+is currently holding any inhibits. Green for none held, yellow for programmatic
+inhibits and red if there is a manual inhibit. A manual inhibit can be placed
+via the menu available from the systray status icon. If not systray is present,
+the tool will still function but status won't be visible.
 
-inhibit-bridge handles SIGUSR1 by toggling the manual inhibit state. Using this,
-you can wire up hotkeys in sway/i3/whatever to change the inhibit state without
-the mouse.
+You can toggle inhibit-bridge's manual inhibit state by sending SIGUSR1. This
+allows you to wire up hotkeys in sway/i3/whatever to change the inhibit state
+without the mouse.
 
-inhibit-bridle will heartbeat check peers that have requested inhibits so that
-we don't end up in a state where a program crash leads to permanently inhibited
-screensaver/idle behaviour.
+inhibit-bridle will heartbeat check peers that have requested programatic
+inhibits so that it doesn't leave the machine in an uninhibited state in the
+case where the requesting peer program has crashed.
 
 It works with recent versions of both Chrome, Firefox and vlc. In Firefox, you
 may need to enable dom.wakelock.enabled in about:config so that dbus messages
