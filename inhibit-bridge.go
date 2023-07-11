@@ -15,6 +15,7 @@ import (
 
 	"fyne.io/systray"
 	"github.com/coreos/go-systemd/login1"
+	"github.com/esiqveland/notify"
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/introspect"
 )
@@ -42,8 +43,9 @@ var (
 
 	// CLI Flags
 	heartbeatInterval = flag.Duration("heartbeat_interval", time.Duration(10*time.Second), "How long do we wait between active lock peer validations.")
-	verbose           = flag.Bool("verbose", false, "If true, output logging status updates. Be quiet when false.")
 	logfile           = flag.String("logfile", "", "If set, log to this path instead of the default (os.Stderr) target")
+	sendNotifications = flag.Bool("notify", true, "If true, send notifications on interesting state changes.")
+	verbose           = flag.Bool("verbose", false, "If true, output logging status updates. Be quiet when false.")
 )
 
 func maybeLog(fmt string, args ...interface{}) {
@@ -159,6 +161,8 @@ func (i *inhibitBridge) manualInhibitToggle() {
 }
 
 func (i *inhibitBridge) systrayStart() {
+	var notificationID uint32
+
 	i.manualInhibit = systray.AddMenuItemCheckbox("Manually inhibit screen lock", "", false)
 
 	for {
@@ -172,11 +176,12 @@ func (i *inhibitBridge) systrayStart() {
 				if err := i.UnInhibit(i.dbusName(), uint32(i.localCookie)); err != nil {
 					maybeLog("Error manually unihibiting: %v", err)
 					continue
-
 				}
 
 				i.localCookie = 0
 				i.manualInhibit.Uncheck()
+
+				notificationID = i.notifyInhibitChange("Manual screen lock inhibit cleared", notificationID)
 			} else {
 				cookie, err := i.Inhibit(i.dbusName(), "systray", "clicked")
 				if err != nil {
@@ -186,12 +191,35 @@ func (i *inhibitBridge) systrayStart() {
 
 				i.localCookie = cookie
 				i.manualInhibit.Check()
+
+				notificationID = i.notifyInhibitChange("Manual screen lock inhibit placed", notificationID)
 			}
 		}
 		i.mtx.Lock()
 		i.setStatus()
 		i.mtx.Unlock()
 	}
+}
+
+func (i *inhibitBridge) notifyInhibitChange(message string, replaces uint32) uint32 {
+	if !*sendNotifications {
+		return 0
+	}
+
+	n := notify.Notification{
+		AppName:       i.prog,
+		ReplacesID:    replaces,
+		Summary:       i.prog,
+		Body:          message,
+		ExpireTimeout: 5 * time.Second,
+	}
+
+	id, err := notify.SendNotification(i.dbusConn, n)
+	if err != nil {
+		maybeLog("Error sending notification: %v", err)
+	}
+
+	return id
 }
 
 func (i *inhibitBridge) heartbeatCheck() {

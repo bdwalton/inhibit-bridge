@@ -5,6 +5,7 @@ go 1.19
 require (
 	fyne.io/systray v1.10.1-0.20230710085509-436a931baccf
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf
+	github.com/esiqveland/notify v0.11.2
 	github.com/godbus/dbus/v5 v5.1.0
 )
 
