@@ -44,6 +44,7 @@ var (
 	// CLI Flags
 	heartbeatInterval = flag.Duration("heartbeat_interval", time.Duration(10*time.Second), "How long do we wait between active lock peer validations.")
 	logfile           = flag.String("logfile", "", "If set, log to this path instead of the default (os.Stderr) target")
+	manualTimeout     = flag.Duration("manual_inhibit_timeout", 60*time.Minute, "The maximum time to allow a manual inhibit to persist. 0m disables this feature.")
 	sendNotifications = flag.Bool("notify", true, "If true, send notifications on interesting state changes.")
 	verbose           = flag.Bool("verbose", false, "If true, output logging status updates. Be quiet when false.")
 )
@@ -75,14 +76,15 @@ func (ld *lockDetails) String() string {
 // inhibitBridge represents the state required to bridge dbus inhibit
 // requests to systemd logind idle inhibits.
 type inhibitBridge struct {
-	prog           string
-	dbusConn       *dbus.Conn
-	loginConn      *login1.Conn
-	manualInhibit  *systray.MenuItem
-	localCookie    uint
-	locks          map[uint]*lockDetails
-	mtx            sync.Mutex
-	trayCh, doneCh chan struct{}
+	prog            string
+	dbusConn        *dbus.Conn
+	loginConn       *login1.Conn
+	manualInhibit   *systray.MenuItem
+	localCookie     uint
+	locks           map[uint]*lockDetails
+	mtx             sync.Mutex
+	trayCh, doneCh  chan struct{}
+	manualTimeoutCh chan struct{}
 }
 
 func NewInhibitBridge(prog string) (*inhibitBridge, error) {
@@ -105,12 +107,13 @@ func NewInhibitBridge(prog string) (*inhibitBridge, error) {
 	}
 
 	ib := &inhibitBridge{
-		prog:      prog,
-		dbusConn:  conn,
-		loginConn: login,
-		locks:     make(map[uint]*lockDetails),
-		trayCh:    make(chan struct{}),
-		doneCh:    make(chan struct{}),
+		prog:            prog,
+		dbusConn:        conn,
+		loginConn:       login,
+		locks:           make(map[uint]*lockDetails),
+		trayCh:          make(chan struct{}),
+		doneCh:          make(chan struct{}),
+		manualTimeoutCh: make(chan struct{}),
 	}
 
 	for _, p := range []dbus.ObjectPath{screensaverPath, legacyPath} {
@@ -160,8 +163,30 @@ func (i *inhibitBridge) manualInhibitToggle() {
 	}
 }
 
+func (i *inhibitBridge) manualInhibitTimeout(d time.Duration, cancelCh <-chan struct{}) {
+	select {
+	case <-cancelCh:
+		maybeLog("Manual inhibit timeout was cancelled.")
+	case <-time.NewTimer(d).C:
+		maybeLog("Manual inhibit timeout reached.")
+		i.manualTimeoutCh <- struct{}{}
+	}
+}
+
+func (i *inhibitBridge) manualUninhibit() {
+	if i.localCookie != 0 {
+		if err := i.UnInhibit(i.dbusName(), uint32(i.localCookie)); err != nil {
+			maybeLog("Error manually unihibiting after timeout: %v", err)
+			return
+		}
+
+		i.localCookie = 0
+		i.manualInhibit.Uncheck()
+	}
+}
 func (i *inhibitBridge) systrayStart() {
 	var notificationID uint32
+	cancelCh := make(chan struct{})
 
 	i.manualInhibit = systray.AddMenuItemCheckbox("Manually inhibit screen lock", "", false)
 
@@ -169,19 +194,22 @@ func (i *inhibitBridge) systrayStart() {
 		select {
 		case <-i.trayCh:
 			maybeLog("Exiting systray.")
+			close(i.manualTimeoutCh)
 			close(i.trayCh)
 			return
+		case <-i.manualTimeoutCh:
+			i.manualUninhibit()
+			i.notifyInhibitChange("Released manual inhibit after timeout.", 0)
 		case <-i.manualInhibit.ClickedCh:
 			if i.manualInhibit.Checked() {
-				if err := i.UnInhibit(i.dbusName(), uint32(i.localCookie)); err != nil {
-					maybeLog("Error manually unihibiting: %v", err)
-					continue
-				}
-
-				i.localCookie = 0
-				i.manualInhibit.Uncheck()
+				i.manualUninhibit()
 
 				notificationID = i.notifyInhibitChange("Manual screen lock inhibit cleared", notificationID)
+				if *manualTimeout > 0 {
+					// Cancel the timeout on manual the inhibit
+					cancelCh <- struct{}{}
+				}
+
 			} else {
 				cookie, err := i.Inhibit(i.dbusName(), "systray", "clicked")
 				if err != nil {
@@ -192,7 +220,15 @@ func (i *inhibitBridge) systrayStart() {
 				i.localCookie = cookie
 				i.manualInhibit.Check()
 
-				notificationID = i.notifyInhibitChange("Manual screen lock inhibit placed", notificationID)
+				m := fmt.Sprintf("Manual screen lock inhibit placed.")
+				if *manualTimeout > 0 {
+					m += fmt.Sprintf(" It will expire in %s", *manualTimeout)
+				}
+				notificationID = i.notifyInhibitChange(m, notificationID)
+				if *manualTimeout > 0 {
+					go i.manualInhibitTimeout(*manualTimeout, cancelCh)
+				}
+
 			}
 		}
 		i.mtx.Lock()
