@@ -166,9 +166,9 @@ func (i *inhibitBridge) manualInhibitToggle() {
 func (i *inhibitBridge) manualInhibitTimeout(d time.Duration, cancelCh <-chan struct{}) {
 	select {
 	case <-cancelCh:
-		maybeLog("Manual inhibit timeout was cancelled.")
+		maybeLog("Manual inhibit timeout was cancelled.\n")
 	case <-time.NewTimer(d).C:
-		maybeLog("Manual inhibit timeout reached.")
+		maybeLog("Manual inhibit timeout reached.\n")
 		i.manualTimeoutCh <- struct{}{}
 	}
 }
@@ -176,7 +176,7 @@ func (i *inhibitBridge) manualInhibitTimeout(d time.Duration, cancelCh <-chan st
 func (i *inhibitBridge) manualUninhibit() {
 	if i.localCookie != 0 {
 		if err := i.UnInhibit(i.dbusName(), uint32(i.localCookie)); err != nil {
-			maybeLog("Error manually unihibiting after timeout: %v", err)
+			maybeLog("Error manually unihibiting after timeout: %v\n", err)
 			return
 		}
 
@@ -213,7 +213,7 @@ func (i *inhibitBridge) systrayStart() {
 			} else {
 				cookie, err := i.Inhibit(i.dbusName(), "systray", "clicked")
 				if err != nil {
-					maybeLog("Error manually inhibiting: %v", err)
+					maybeLog("Error manually inhibiting: %v\n", err)
 					continue
 				}
 
@@ -228,7 +228,6 @@ func (i *inhibitBridge) systrayStart() {
 				if *manualTimeout > 0 {
 					go i.manualInhibitTimeout(*manualTimeout, cancelCh)
 				}
-
 			}
 		}
 		i.mtx.Lock()
@@ -252,7 +251,7 @@ func (i *inhibitBridge) notifyInhibitChange(message string, replaces uint32) uin
 
 	id, err := notify.SendNotification(i.dbusConn, n)
 	if err != nil {
-		maybeLog("Error sending notification: %v", err)
+		maybeLog("Error sending notification: %v\n", err)
 	}
 
 	return id
