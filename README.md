@@ -23,11 +23,11 @@ may need to enable dom.wakelock.enabled in about:config so that dbus messages
 are sent.
 
 It accepts the following flags:
---heartbeat_interval - how often to check peers for liveness.
---logfile - where to write logs
---manual_inhibit_timeout - the duration for which manual inhibits are honoured
---notify - whether to send notifications of state changes in some cases
---verbose - whether to write logs
+*  --heartbeat_interval - how often to check peers for liveness.
+*  --logfile - where to write logs
+*  --manual_inhibit_timeout - the duration for which manual inhibits are honoured
+*  --notify - whether to send notifications of state changes in some cases
+*  --verbose - whether to write logs
 
 ## License
 
