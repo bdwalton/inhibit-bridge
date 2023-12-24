@@ -292,6 +292,7 @@ func (i *inhibitBridge) heartbeatCheck() {
 					delete(i.locks, ld.cookie)
 				}
 			}
+			i.setStatus()
 			i.mtx.Unlock()
 		case <-i.doneCh:
 			maybeLog("Heartbeat checker stopping.\n")
