@@ -265,7 +265,7 @@ func (i *inhibitBridge) heartbeatCheck() {
 	for {
 		select {
 		case <-ticker.C:
-			maybeLog("Heartbeck checker running.\n")
+			maybeLog("Heartbeat checker running.\n")
 			// Not every peer implements the
 			// org.freedesktop.DBus.Peer interface, so
 			// we'll simply lookup every active peer on
